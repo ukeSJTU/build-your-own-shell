@@ -62,7 +62,7 @@ def main():
             else:
                 # Execute external programs
                 try:
-                    subprocess.run([full_path] + args)
+                    subprocess.run([cmd] + args)
                 except Exception as e:
                     print(f"Error executing {cmd}: {e}")
 
