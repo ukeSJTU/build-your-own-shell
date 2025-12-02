@@ -2,6 +2,24 @@ import os
 import sys
 
 
+def find_exe_in_path(exe: str):
+    PATH = os.getenv("PATH")
+    for dir in PATH.split(os.pathsep):
+        # 1. Check if a file with the command name exists.
+        full_path = os.path.join(dir, exe)
+        if os.path.exists(full_path):
+            # 2. Check if the file has execute permissions.
+            if os.access(full_path, os.X_OK):
+                # 3. If the file exists and has execute permissions, print <command> is <full_path> and stop.
+                return True, full_path
+            else:
+                # 4. If the file exists but lacks execute permissions, skip it and continue to the next directory.
+                continue
+
+    else:
+        return False, "not found"
+
+
 def main():
     while True:
         sys.stdout.write("$ ")
@@ -23,19 +41,9 @@ def main():
             if cmd in ["echo", "exit", "type"]:
                 print(f"{cmd} is a shell builtin")
             else:
-                PATH = os.getenv("PATH")
-                for dir in PATH.split(os.pathsep):
-                    # 1. Check if a file with the command name exists.
-                    full_path = os.path.join(dir, cmd)
-                    if os.path.exists(full_path):
-                        # 2. Check if the file has execute permissions.
-                        if os.access(full_path, os.X_OK):
-                            # 3. If the file exists and has execute permissions, print <command> is <full_path> and stop.
-                            print(f"{cmd} is {full_path}")
-                            break
-                        else:
-                            # 4. If the file exists but lacks execute permissions, skip it and continue to the next directory.
-                            continue
+                flag, full_path = find_exe_in_path(exe=cmd)
+                if flag:
+                    print(f"{cmd} is {full_path}")
                 else:
                     print(f"{cmd}: not found")
             continue
