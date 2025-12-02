@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 
 
@@ -47,7 +48,24 @@ def main():
                 else:
                     print(f"{cmd}: not found")
             continue
-        print(f"{command}: command not found")
+        else:
+            parts = command.split()
+            if not parts:
+                continue
+            
+            cmd = parts[0]
+            args = parts[1:]
+            
+            flag, full_path = find_exe_in_path(exe=cmd)
+            if not flag:
+                print(f"{cmd}: command not found")
+            else:
+                # Execute external programs
+                try:
+                    subprocess.run([full_path] + args)
+                except Exception as e:
+                    print(f"Error executing {cmd}: {e}")
+
 
 
 if __name__ == "__main__":
