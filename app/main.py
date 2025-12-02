@@ -9,6 +9,9 @@ def main():
         command = input()
         if command == "exit":
             break
+        if command.startswith("echo "):
+            _, message = command.split(" ", 1)
+            print(message)
         print(f"{command}: command not found")
 
 
