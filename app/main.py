@@ -12,6 +12,7 @@ def main():
         if command.startswith("echo "):
             _, message = command.split(" ", 1)
             print(message)
+            continue
         print(f"{command}: command not found")
 
 
