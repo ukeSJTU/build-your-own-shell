@@ -18,7 +18,7 @@ uncomment the relevant code, and push your changes to pass the first stage:
 
 ```sh
 git commit -am "pass 1st stage" # any msg
-git push origin master
+git push codecrafters master
 ```
 
 Time to move on to the next stage!
@@ -30,5 +30,5 @@ Note: This section is for stages 2 and beyond.
 1. Ensure you have `uv` installed locally
 1. Run `./your_program.sh` to run your program, which is implemented in
    `app/main.py`.
-1. Commit your changes and run `git push origin master` to submit your solution
+1. Commit your changes and run `git push codecrafters master` to submit your solution
    to CodeCrafters. Test output will be streamed to your terminal.
