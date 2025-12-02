@@ -36,7 +36,8 @@ def main():
                         else:
                             # 4. If the file exists but lacks execute permissions, skip it and continue to the next directory.
                             continue
-                print(f"{cmd}: not found")
+                else:
+                    print(f"{cmd}: not found")
             continue
         print(f"{command}: command not found")
 
