@@ -29,6 +29,9 @@ def main():
         command = input()
         if command == "exit":
             break
+        if command == "pwd":
+            print(os.getcwd())
+            continue
         if command.startswith("echo "):
             _, message = command.split(" ", 1)
             print(message)
