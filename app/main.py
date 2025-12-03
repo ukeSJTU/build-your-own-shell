@@ -1,6 +1,44 @@
 import os
+import shlex
 import subprocess
 import sys
+
+
+def handle_exit(args):
+    sys.exit(0)
+
+
+def handle_echo(args):
+    print(" ".join(args))
+
+
+def handle_pwd(args):
+    print(os.getcwd())
+
+
+def handle_cd(args):
+    raise NotImplementedError("command cd is not implemented")
+
+
+def handle_type(args):
+    target = args[0]
+    if target in BUILTINS:
+        print(f"{target} is a shell builtin")
+    else:
+        flag, full_path = find_exe_in_path(target)
+        if flag:
+            print(f"{target} is {full_path}")
+        else:
+            print(f"{target}: not found")
+
+
+BUILTINS = {
+    "exit": handle_exit,
+    "echo": handle_echo,
+    "pwd": handle_pwd,
+    "cd": handle_cd,
+    "type": handle_type,
+}
 
 
 def find_exe_in_path(exe: str):
@@ -16,59 +54,50 @@ def find_exe_in_path(exe: str):
             else:
                 # 4. If the file exists but lacks execute permissions, skip it and continue to the next directory.
                 continue
-
     else:
         return False, "not found"
+
+
+def execute_external(cmd, args):
+    flag, full_path = find_exe_in_path(cmd)
+    if flag:
+        try:
+            subprocess.run([cmd] + args)
+        except Exception as e:
+            print(f"Error: {e}")
+    else:
+        print(f"{cmd}: command not found")
 
 
 def main():
     while True:
         sys.stdout.write("$ ")
+        sys.stdout.flush()
 
-        # Wait for user input
-        command = input()
-        if command == "exit":
+        try:
+            user_input = input()
+        except EOFError:
             break
-        if command == "pwd":
-            print(os.getcwd())
-            continue
-        if command.startswith("echo "):
-            _, message = command.split(" ", 1)
-            print(message)
-            continue
-        if command.startswith("type "):
-            _, cmd = command.split(" ", 1)
-            # Check cmd sequence:
-            # 1. Check if cmd is a builtin shell command
-            # 2. Go through every directory in PATH
-            # 3. Mark command as not found
-            if cmd in ["echo", "exit", "type", "pwd"]:
-                print(f"{cmd} is a shell builtin")
-            else:
-                flag, full_path = find_exe_in_path(exe=cmd)
-                if flag:
-                    print(f"{cmd} is {full_path}")
-                else:
-                    print(f"{cmd}: not found")
-            continue
-        else:
-            parts = command.split()
-            if not parts:
-                continue
-            
-            cmd = parts[0]
-            args = parts[1:]
-            
-            flag, full_path = find_exe_in_path(exe=cmd)
-            if not flag:
-                print(f"{cmd}: command not found")
-            else:
-                # Execute external programs
-                try:
-                    subprocess.run([cmd] + args)
-                except Exception as e:
-                    print(f"Error executing {cmd}: {e}")
 
+        if not user_input:
+            continue
+
+        try:
+            parts = shlex.split(user_input)
+        except ValueError:
+            print("Syntax error: unbalanced quotes")
+            continue
+
+        if not parts:
+            continue
+
+        cmd = parts[0]
+        args = parts[1:]
+
+        if cmd in BUILTINS:
+            BUILTINS[cmd](args)
+        else:
+            execute_external(cmd, args)
 
 
 if __name__ == "__main__":
