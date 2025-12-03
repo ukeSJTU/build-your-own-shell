@@ -1,5 +1,4 @@
 import os
-import shlex
 import subprocess
 import sys
 
@@ -73,6 +72,36 @@ def execute_external(cmd, args):
         print(f"{cmd}: command not found")
 
 
+def parse_input(input_string):
+    tokens = []
+    current_token = []
+    in_single_quote = False
+
+    for char in input_string:
+        if in_single_quote:
+            if char == "'":
+                in_single_quote = False # Closing single quote
+            else:
+                current_token.append(char)
+        else: # Not in single quote pair
+            if char == "'":
+                in_single_quote = True
+            elif char == " ":
+                if len(current_token) > 0:
+                    tokens.append("".join(current_token))
+                    current_token = []
+                else:
+                    # Encountering a space while token is empty, we can just ignore it
+                    pass
+            else:
+                current_token.append(char)
+
+    
+    if len(current_token) > 0:
+        tokens.append("".join(current_token))
+    
+    return tokens
+
 def main():
     while True:
         sys.stdout.write("$ ")
@@ -87,7 +116,8 @@ def main():
             continue
 
         try:
-            parts = shlex.split(user_input)
+            # parts = shlex.split(user_input)
+            parts = parse_input(user_input)
         except ValueError:
             print("Syntax error: unbalanced quotes")
             continue
