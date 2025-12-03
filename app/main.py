@@ -76,16 +76,27 @@ def parse_input(input_string):
     tokens = []
     current_token = []
     in_single_quote = False
+    in_double_quote = False
 
     for char in input_string:
+        # In single quote mode, only another single quote ' can end this state
         if in_single_quote:
             if char == "'":
                 in_single_quote = False # Closing single quote
             else:
                 current_token.append(char)
-        else: # Not in single quote pair
+        # In double quote mode, only another double quote " can end this state
+        elif in_double_quote:
+            if char == '"':
+                in_double_quote = False
+            else:
+                current_token.append(char)
+        # In normal mode
+        else: 
             if char == "'":
                 in_single_quote = True
+            elif char == '"':
+                in_double_quote = True
             elif char == " ":
                 if len(current_token) > 0:
                     tokens.append("".join(current_token))
