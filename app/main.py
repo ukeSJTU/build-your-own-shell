@@ -77,8 +77,14 @@ def parse_input(input_string):
     current_token = []
     in_single_quote = False
     in_double_quote = False
+    escape_next = False
 
     for char in input_string:
+        # Handle escape character
+        if escape_next:
+            current_token.append(char)
+            escape_next = False
+            continue
         # In single quote mode, only another single quote ' can end this state
         if in_single_quote:
             if char == "'":
@@ -93,7 +99,10 @@ def parse_input(input_string):
                 current_token.append(char)
         # In normal mode
         else: 
-            if char == "'":
+            if char == '\\':
+                # If a backslash is met, enter escape next mode
+                escape_next = True
+            elif char == "'":
                 in_single_quote = True
             elif char == '"':
                 in_double_quote = True
