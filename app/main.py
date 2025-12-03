@@ -77,7 +77,9 @@ def parse_input(input_string):
     current_token = []
     in_single_quote = False
     in_double_quote = False
-    escape_next = False
+    
+    escape_next = False # Used when in unquoted mode
+    double_quote_escape = False # Used when in double quoted mode
 
     for char in input_string:
         # Handle escape character
@@ -93,10 +95,23 @@ def parse_input(input_string):
                 current_token.append(char)
         # In double quote mode, only another double quote " can end this state
         elif in_double_quote:
-            if char == '"':
-                in_double_quote = False
+            # If a backslash has been met before
+            if double_quote_escape:
+                if char in ['\\', '"']:
+                    current_token.append(char)
+                else:
+                    current_token.append('\\')
+                    current_token.append(char)
+                
+                # 重置双引号内的转义状态
+                double_quote_escape = False
             else:
-                current_token.append(char)
+                if char == '"':
+                    in_double_quote = False
+                elif char == '\\':
+                    double_quote_escape = True
+                else:
+                    current_token.append(char)
         # In normal mode
         else: 
             if char == '\\':
