@@ -17,7 +17,12 @@ def handle_pwd(args):
 
 
 def handle_cd(args):
-    raise NotImplementedError("command cd is not implemented")
+    # TODO: for this stage, we are only handling absolute path
+    path = args[0]
+    try:
+        os.chdir(path)
+    except FileNotFoundError:
+        print(f"cd: {path}: No such file or directory")
 
 
 def handle_type(args):
