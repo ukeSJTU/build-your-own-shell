@@ -17,8 +17,7 @@ def handle_pwd(args):
 
 
 def handle_cd(args):
-    # TODO: for this stage, we are only handling absolute path
-    path = args[0]
+    path = os.path.expanduser(args[0])
     try:
         os.chdir(path)
     except FileNotFoundError:
