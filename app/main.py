@@ -42,7 +42,7 @@ def main():
             # 1. Check if cmd is a builtin shell command
             # 2. Go through every directory in PATH
             # 3. Mark command as not found
-            if cmd in ["echo", "exit", "type"]:
+            if cmd in ["echo", "exit", "type", "pwd"]:
                 print(f"{cmd} is a shell builtin")
             else:
                 flag, full_path = find_exe_in_path(exe=cmd)
