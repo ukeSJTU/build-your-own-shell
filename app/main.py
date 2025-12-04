@@ -61,14 +61,29 @@ def find_exe_in_path(exe: str):
         return False, "not found"
 
 
-def execute_external(cmd, args, stdout_file=None, stderr_file=None):
+def execute_external(
+    cmd,
+    args,
+    stdout_file=None,
+    stdout_append=False,
+    stderr_file=None,
+    stderr_append=False,
+):
     flag, full_path = find_exe_in_path(cmd)
     if flag:
         try:
-            stdout_handle = open(stdout_file, 'w') if stdout_file else None
-            stderr_handle = open(stderr_file, 'w') if stderr_file else None
+            stdout_handle = (
+                open(stdout_file, "a" if stdout_append else "w")
+                if stdout_file
+                else None
+            )
+            stderr_handle = (
+                open(stderr_file, "a" if stderr_append else "w")
+                if stderr_file
+                else None
+            )
             subprocess.run([cmd] + args, stdout=stdout_handle, stderr=stderr_handle)
-            
+
             # Close file handles
             if stdout_handle:
                 stdout_handle.close()
@@ -148,7 +163,9 @@ def parse_input(input_string):
 def parse_redirection(parts):
     command_parts = []
     stdout_file = None
+    stdout_append = False
     stderr_file = None
+    stderr_append = False
 
     i = 0
     while i < len(parts):
@@ -156,23 +173,41 @@ def parse_redirection(parts):
             # Next token should be the filename
             if i + 1 < len(parts):
                 stdout_file = parts[i + 1]
+                stdout_append = False
                 i += 2  # Skip both the operator and the filename
             else:
                 print("Syntax error: expected filename after redirection operator")
-                return None, None, None
+                return None, None, None, None, None
+        elif parts[i] == ">>" or parts[i] == "1>>":
+            if i + 1 < len(parts):
+                stdout_file = parts[i + 1]
+                stdout_append = True
+                i += 2
+            else:
+                print("Syntax error: expected filename after redirection operator")
+                return None, None, None, None, None
         elif parts[i] == "2>":
             # Next token should be the filename
             if i + 1 < len(parts):
                 stderr_file = parts[i + 1]
+                stderr_append = False
                 i += 2  # Skip both the operator and the filename
             else:
                 print("Syntax error: expected filename after redirection operator")
-                return None, None, None
+                return None, None, None, None, None
+        elif parts[i] == "2>>":
+            if i + 1 < len(parts):
+                stdout_file = parts[i + 1]
+                stderr_append = True
+                i += 2
+            else:
+                print("Syntax error: expected filename after redirection operator")
+                return None, None, None, None, None
         else:
             command_parts.append(parts[i])
             i += 1
 
-    return command_parts, stdout_file, stderr_file
+    return command_parts, stdout_file, stdout_append, stderr_file, stderr_append
 
 
 def main():
@@ -198,13 +233,12 @@ def main():
         if not parts:
             continue
 
-        command_parts, stdout_file, stderr_file = parse_redirection(parts)
+        result = parse_redirection(parts)
 
-        if command_parts is None:
+        if result[0] is None:
             continue
 
-        if not command_parts:
-            continue
+        command_parts, stdout_file, stdout_append, stderr_file, stderr_append = result
 
         cmd = command_parts[0]
         args = command_parts[1:]
@@ -216,9 +250,9 @@ def main():
                 original_stderr = sys.stderr
                 try:
                     if stdout_file:
-                        sys.stdout = open(stdout_file, "w")
+                        sys.stdout = open(stdout_file, "a" if stdout_append else "w")
                     if stderr_file:
-                        sys.stderr = open(stderr_file, "w")
+                        sys.stderr = open(stderr_file, "a" if stderr_append else "w")
                     BUILTINS[cmd](args)
                 finally:
                     if stdout_file:
@@ -230,7 +264,9 @@ def main():
             else:
                 BUILTINS[cmd](args)
         else:
-            execute_external(cmd, args, stdout_file, stderr_file)
+            execute_external(
+                cmd, args, stdout_file, stdout_append, stderr_file, stderr_append
+            )
 
 
 if __name__ == "__main__":
