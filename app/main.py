@@ -61,16 +61,19 @@ def find_exe_in_path(exe: str):
         return False, "not found"
 
 
-def execute_external(cmd, args, redirect_file=None):
+def execute_external(cmd, args, stdout_file=None, stderr_file=None):
     flag, full_path = find_exe_in_path(cmd)
     if flag:
         try:
-            if redirect_file:
-                # Open the file for writing (create if doesn't exist, overwrite if exists)
-                with open(redirect_file, 'w') as f:
-                    subprocess.run([cmd] + args, stdout=f)
-            else:
-                subprocess.run([cmd] + args)
+            stdout_handle = open(stdout_file, 'w') if stdout_file else None
+            stderr_handle = open(stderr_file, 'w') if stderr_file else None
+            subprocess.run([cmd] + args, stdout=stdout_handle, stderr=stderr_handle)
+            
+            # Close file handles
+            if stdout_handle:
+                stdout_handle.close()
+            if stderr_handle:
+                stderr_handle.close()
         except Exception as e:
             print(f"Error: {e}")
     else:
@@ -82,9 +85,9 @@ def parse_input(input_string):
     current_token = []
     in_single_quote = False
     in_double_quote = False
-    
-    escape_next = False # Used when in unquoted mode
-    double_quote_escape = False # Used when in double quoted mode
+
+    escape_next = False  # Used when in unquoted mode
+    double_quote_escape = False  # Used when in double quoted mode
 
     for char in input_string:
         # Handle escape character
@@ -95,31 +98,31 @@ def parse_input(input_string):
         # In single quote mode, only another single quote ' can end this state
         if in_single_quote:
             if char == "'":
-                in_single_quote = False # Closing single quote
+                in_single_quote = False  # Closing single quote
             else:
                 current_token.append(char)
         # In double quote mode, only another double quote " can end this state
         elif in_double_quote:
             # If a backslash has been met before
             if double_quote_escape:
-                if char in ['\\', '"']:
+                if char in ["\\", '"']:
                     current_token.append(char)
                 else:
-                    current_token.append('\\')
+                    current_token.append("\\")
                     current_token.append(char)
-                
+
                 # 重置双引号内的转义状态
                 double_quote_escape = False
             else:
                 if char == '"':
                     in_double_quote = False
-                elif char == '\\':
+                elif char == "\\":
                     double_quote_escape = True
                 else:
                     current_token.append(char)
         # In normal mode
-        else: 
-            if char == '\\':
+        else:
+            if char == "\\":
                 # If a backslash is met, enter escape next mode
                 escape_next = True
             elif char == "'":
@@ -136,31 +139,41 @@ def parse_input(input_string):
             else:
                 current_token.append(char)
 
-    
     if len(current_token) > 0:
         tokens.append("".join(current_token))
-    
+
     return tokens
+
 
 def parse_redirection(parts):
     command_parts = []
-    redirect_file = None
+    stdout_file = None
+    stderr_file = None
 
     i = 0
     while i < len(parts):
-        if parts[i] == '>' or parts[i] == '1>':
+        if parts[i] == ">" or parts[i] == "1>":
             # Next token should be the filename
             if i + 1 < len(parts):
-                redirect_file = parts[i + 1]
+                stdout_file = parts[i + 1]
                 i += 2  # Skip both the operator and the filename
             else:
                 print("Syntax error: expected filename after redirection operator")
-                return None, None
+                return None, None, None
+        elif parts[i] == "2>":
+            # Next token should be the filename
+            if i + 1 < len(parts):
+                stderr_file = parts[i + 1]
+                i += 2  # Skip both the operator and the filename
+            else:
+                print("Syntax error: expected filename after redirection operator")
+                return None, None, None
         else:
             command_parts.append(parts[i])
             i += 1
 
-    return command_parts, redirect_file
+    return command_parts, stdout_file, stderr_file
+
 
 def main():
     while True:
@@ -185,7 +198,7 @@ def main():
         if not parts:
             continue
 
-        command_parts, redirect_file = parse_redirection(parts)
+        command_parts, stdout_file, stderr_file = parse_redirection(parts)
 
         if command_parts is None:
             continue
@@ -193,25 +206,31 @@ def main():
         if not command_parts:
             continue
 
-
         cmd = command_parts[0]
         args = command_parts[1:]
 
         if cmd in BUILTINS:
             # Handle redirection for built-in commands
-            if redirect_file:
-                # Redirect stdout to file for built-in commands
+            if stdout_file or stderr_file:
                 original_stdout = sys.stdout
+                original_stderr = sys.stderr
                 try:
-                    with open(redirect_file, 'w') as f:
-                        sys.stdout = f
-                        BUILTINS[cmd](args)
+                    if stdout_file:
+                        sys.stdout = open(stdout_file, "w")
+                    if stderr_file:
+                        sys.stderr = open(stderr_file, "w")
+                    BUILTINS[cmd](args)
                 finally:
+                    if stdout_file:
+                        sys.stdout.close()
+                    if stderr_file:
+                        sys.stderr.close()
                     sys.stdout = original_stdout
+                    sys.stderr = original_stderr
             else:
                 BUILTINS[cmd](args)
         else:
-            execute_external(cmd, args, redirect_file)
+            execute_external(cmd, args, stdout_file, stderr_file)
 
 
 if __name__ == "__main__":
