@@ -61,11 +61,16 @@ def find_exe_in_path(exe: str):
         return False, "not found"
 
 
-def execute_external(cmd, args):
+def execute_external(cmd, args, redirect_file=None):
     flag, full_path = find_exe_in_path(cmd)
     if flag:
         try:
-            subprocess.run([cmd] + args)
+            if redirect_file:
+                # Open the file for writing (create if doesn't exist, overwrite if exists)
+                with open(redirect_file, 'w') as f:
+                    subprocess.run([cmd] + args, stdout=f)
+            else:
+                subprocess.run([cmd] + args)
         except Exception as e:
             print(f"Error: {e}")
     else:
@@ -137,6 +142,26 @@ def parse_input(input_string):
     
     return tokens
 
+def parse_redirection(parts):
+    command_parts = []
+    redirect_file = None
+
+    i = 0
+    while i < len(parts):
+        if parts[i] == '>' or parts[i] == '1>':
+            # Next token should be the filename
+            if i + 1 < len(parts):
+                redirect_file = parts[i + 1]
+                i += 2  # Skip both the operator and the filename
+            else:
+                print("Syntax error: expected filename after redirection operator")
+                return None, None
+        else:
+            command_parts.append(parts[i])
+            i += 1
+
+    return command_parts, redirect_file
+
 def main():
     while True:
         sys.stdout.write("$ ")
@@ -160,13 +185,33 @@ def main():
         if not parts:
             continue
 
-        cmd = parts[0]
-        args = parts[1:]
+        command_parts, redirect_file = parse_redirection(parts)
+
+        if command_parts is None:
+            continue
+
+        if not command_parts:
+            continue
+
+
+        cmd = command_parts[0]
+        args = command_parts[1:]
 
         if cmd in BUILTINS:
-            BUILTINS[cmd](args)
+            # Handle redirection for built-in commands
+            if redirect_file:
+                # Redirect stdout to file for built-in commands
+                original_stdout = sys.stdout
+                try:
+                    with open(redirect_file, 'w') as f:
+                        sys.stdout = f
+                        BUILTINS[cmd](args)
+                finally:
+                    sys.stdout = original_stdout
+            else:
+                BUILTINS[cmd](args)
         else:
-            execute_external(cmd, args)
+            execute_external(cmd, args, redirect_file)
 
 
 if __name__ == "__main__":
