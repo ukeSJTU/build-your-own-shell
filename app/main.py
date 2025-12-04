@@ -197,7 +197,7 @@ def parse_redirection(parts):
                 return None, None, None, None, None
         elif parts[i] == "2>>":
             if i + 1 < len(parts):
-                stdout_file = parts[i + 1]
+                stderr_file = parts[i + 1]
                 stderr_append = True
                 i += 2
             else:
