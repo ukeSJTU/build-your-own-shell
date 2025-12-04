@@ -1,6 +1,8 @@
+import contextlib
 import os
 import subprocess
 import sys
+from typing import Literal
 
 
 def handle_exit(args):
@@ -44,6 +46,42 @@ BUILTINS = {
 }
 
 
+@contextlib.contextmanager
+def manage_io(redirects):
+    opened_files = []
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
+    stdout_handle = None
+    stderr_handle = None
+
+    try:
+        # Handle stdout redirect
+        if 1 in redirects:
+            filename, mode = redirects[1]
+            f = open(filename, mode)
+            opened_files.append(f)
+            stdout_handle = f
+            sys.stdout = f
+
+        # Handle stderr redirect
+        if 2 in redirects:
+            filename, mode = redirects[2]
+            f = open(filename, mode)
+            opened_files.append(f)
+            stderr_handle = f
+            sys.stderr = f
+
+        yield stdout_handle, stderr_handle
+
+    finally:
+        # Cleanup
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+        for f in opened_files:
+            f.close()
+
+
 def find_exe_in_path(exe: str):
     PATH = os.getenv("PATH")
     for dir in PATH.split(os.pathsep):
@@ -61,34 +99,11 @@ def find_exe_in_path(exe: str):
         return False, "not found"
 
 
-def execute_external(
-    cmd,
-    args,
-    stdout_file=None,
-    stdout_append=False,
-    stderr_file=None,
-    stderr_append=False,
-):
+def execute_external(cmd, args, stdout_handle=None, stderr_handle=None):
     flag, full_path = find_exe_in_path(cmd)
     if flag:
         try:
-            stdout_handle = (
-                open(stdout_file, "a" if stdout_append else "w")
-                if stdout_file
-                else None
-            )
-            stderr_handle = (
-                open(stderr_file, "a" if stderr_append else "w")
-                if stderr_file
-                else None
-            )
             subprocess.run([cmd] + args, stdout=stdout_handle, stderr=stderr_handle)
-
-            # Close file handles
-            if stdout_handle:
-                stdout_handle.close()
-            if stderr_handle:
-                stderr_handle.close()
         except Exception as e:
             print(f"Error: {e}")
     else:
@@ -162,52 +177,34 @@ def parse_input(input_string):
 
 def parse_redirection(parts):
     command_parts = []
-    stdout_file = None
-    stdout_append = False
-    stderr_file = None
-    stderr_append = False
+    redirection_map: dict[str, tuple[Literal[1, 2], Literal["w", "a"]]] = {
+        ">": (1, "w"),
+        "1>": (1, "w"),
+        ">>": (1, "a"),
+        "1>>": (1, "a"),
+        "2>": (2, "w"),
+        "2>>": (2, "a"),
+    }
+    # Save result in `redirects`: {1: ('file.txt', 'w'), 2: ('err.log', 'a')}
+    redirects = {}
 
     i = 0
     while i < len(parts):
-        if parts[i] == ">" or parts[i] == "1>":
+        token = parts[i]
+        if token in redirection_map:
             # Next token should be the filename
-            if i + 1 < len(parts):
-                stdout_file = parts[i + 1]
-                stdout_append = False
-                i += 2  # Skip both the operator and the filename
-            else:
+            if i + 1 >= len(parts):
                 print("Syntax error: expected filename after redirection operator")
-                return None, None, None, None, None
-        elif parts[i] == ">>" or parts[i] == "1>>":
-            if i + 1 < len(parts):
-                stdout_file = parts[i + 1]
-                stdout_append = True
-                i += 2
-            else:
-                print("Syntax error: expected filename after redirection operator")
-                return None, None, None, None, None
-        elif parts[i] == "2>":
-            # Next token should be the filename
-            if i + 1 < len(parts):
-                stderr_file = parts[i + 1]
-                stderr_append = False
-                i += 2  # Skip both the operator and the filename
-            else:
-                print("Syntax error: expected filename after redirection operator")
-                return None, None, None, None, None
-        elif parts[i] == "2>>":
-            if i + 1 < len(parts):
-                stderr_file = parts[i + 1]
-                stderr_append = True
-                i += 2
-            else:
-                print("Syntax error: expected filename after redirection operator")
-                return None, None, None, None, None
+                return None, None
+            filename = parts[i + 1]
+            fd, mode = redirection_map[token]
+            redirects[fd] = (filename, mode)
+            i += 2
         else:
             command_parts.append(parts[i])
             i += 1
 
-    return command_parts, stdout_file, stdout_append, stderr_file, stderr_append
+    return command_parts, redirects
 
 
 def main():
@@ -233,40 +230,29 @@ def main():
         if not parts:
             continue
 
-        result = parse_redirection(parts)
+        command_parts, redirects = parse_redirection(parts)
 
-        if result[0] is None:
+        # Syntax error occurred
+        if command_parts is None:
             continue
 
-        command_parts, stdout_file, stdout_append, stderr_file, stderr_append = result
+        # Empty command
+        if not command_parts:
+            continue
 
         cmd = command_parts[0]
         args = command_parts[1:]
 
-        if cmd in BUILTINS:
-            # Handle redirection for built-in commands
-            if stdout_file or stderr_file:
-                original_stdout = sys.stdout
-                original_stderr = sys.stderr
-                try:
-                    if stdout_file:
-                        sys.stdout = open(stdout_file, "a" if stdout_append else "w")
-                    if stderr_file:
-                        sys.stderr = open(stderr_file, "a" if stderr_append else "w")
+        try:
+            with manage_io(redirects) as (out_handle, err_handle):
+                if cmd in BUILTINS:
                     BUILTINS[cmd](args)
-                finally:
-                    if stdout_file:
-                        sys.stdout.close()
-                    if stderr_file:
-                        sys.stderr.close()
-                    sys.stdout = original_stdout
-                    sys.stderr = original_stderr
-            else:
-                BUILTINS[cmd](args)
-        else:
-            execute_external(
-                cmd, args, stdout_file, stdout_append, stderr_file, stderr_append
-            )
+                else:
+                    execute_external(
+                        cmd, args, stdout_handle=out_handle, stderr_handle=err_handle
+                    )
+        except Exception as e:
+            print(f"Error: {e}")
 
 
 if __name__ == "__main__":
