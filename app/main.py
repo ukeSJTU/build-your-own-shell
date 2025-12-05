@@ -6,6 +6,7 @@ import sys
 from typing import Literal
 
 HISTORY = []
+HISTORY_WRITTEN_COUNT = 0
 
 def handle_exit(args):
     sys.exit(0)
@@ -39,6 +40,8 @@ def handle_type(args):
             print(f"{target}: not found")
 
 def handle_history(args):
+    global HISTORY_WRITTEN_COUNT
+
     if len(args) >= 2 and args[0] == "-r":
         path = args[1]
         try:
@@ -58,6 +61,24 @@ def handle_history(args):
             with open(path, "w") as f:
                 for cmd in HISTORY:
                     f.write(cmd + "\n")
+
+                HISTORY_WRITTEN_COUNT = len(HISTORY)
+                
+        except Exception as e:
+            print(f"history: {e}")
+
+        return
+    
+    if len(args) >= 2 and args[0] == "-a":
+        path = args[1]
+        try:
+            with open(path, "a") as f:
+                new_commands = HISTORY[HISTORY_WRITTEN_COUNT:]
+                
+                for cmd in new_commands:
+                    f.write(cmd + "\n")
+
+                HISTORY_WRITTEN_COUNT = len(HISTORY)
         except Exception as e:
             print(f"history: {e}")
 
