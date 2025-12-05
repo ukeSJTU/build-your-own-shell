@@ -38,8 +38,14 @@ def handle_type(args):
             print(f"{target}: not found")
 
 def handle_history(args):
-    for i, h in enumerate(HISTORY):
-        print(f"    {i+1}  {h}")
+    limit = int(args[0]) if args and len(args) > 0 else len(HISTORY)
+    
+    history_to_show = HISTORY[-limit:] if limit < len(HISTORY) else HISTORY
+    
+    start_index = len(HISTORY) - len(history_to_show) + 1
+    
+    for i, h in enumerate(history_to_show, start=start_index):
+        print(f"    {i}  {h}")
 
 BUILTINS = {
     "exit": handle_exit,
