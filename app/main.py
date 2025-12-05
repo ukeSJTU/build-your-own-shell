@@ -265,6 +265,123 @@ def parse_redirection(parts):
 
     return command_parts, redirects
 
+def parse_pipeline(tokens):
+    # Convert a list of tokens into a list of commands separated by '|'
+    # Given tokens: ['ls', '-l', '|', 'grep', 'py']
+    # Return: [['ls', '-l'], ['grep', 'py']]
+    if "|" not in tokens:
+        return [tokens]
+    
+    commands = []
+    current_cmd = []
+
+    for token in tokens:
+        if token == "|":
+            if current_cmd:
+                commands.append(current_cmd)
+            current_cmd = []
+        else:
+            current_cmd.append(token)
+        
+    if current_cmd:
+        commands.append(current_cmd)
+
+    return commands
+
+def run_pipeline(commands):
+    processes = []
+
+    prev_pipe_read = None # THis holds the exit of previous pipe
+
+    for i, cmd_tokens in enumerate(commands):
+        is_last = (i == len(commands) - 1)
+
+        cmd_parts, redirects = parse_redirection(cmd_tokens)
+        if not cmd_parts:
+            if prev_pipe_read is not None:
+                os.close(prev_pipe_read)
+            continue
+
+        cmd_name = cmd_parts[0]
+        cmd_args = cmd_parts[1:]
+
+        # Prepare the next pipe
+        current_pipe_read= None
+        current_pipe_write= None
+
+        stdout_dest = None
+        stderr_dest = None
+
+        if not is_last:
+            r, w = os.pipe()
+            current_pipe_read = r
+            current_pipe_write = w
+            stdout_dest = w # Current cmd should write into w
+        else:
+            # If is the last command, default write to screen which is None
+            # Or will handled by parse_redirection
+            pass
+
+        # Determine Input
+        stdin_source = prev_pipe_read
+
+        if cmd_name in BUILTINS:
+            original_stdout = sys.stdout
+            original_stderr = sys.stderr
+
+            try:
+                if stdout_dest is not None:
+                    sys.stdout = os.fdopen(stdout_dest, 'w')
+                elif 1 in redirects:
+                     fname, mode = redirects[1]
+                     sys.stdout = open(fname, mode)
+
+                BUILTINS[cmd_name](cmd_args)
+                
+            except Exception as e:
+                print(f"{cmd_name}: {e}", file=sys.stderr)
+            finally:
+                if sys.stdout != original_stdout:
+                    sys.stdout.close()
+                sys.stdout = original_stdout
+                sys.stderr = original_stderr
+
+        else:
+            full_path_found, full_path = find_exe_in_path(cmd_name)
+            if full_path_found:
+                try:
+                    if is_last and 1 in redirects:
+                         fname, mode = redirects[1]
+                         stdout_dest = open(fname, mode)
+                    
+                    p = subprocess.Popen(
+                        [cmd_name] + cmd_args,
+                        stdin=stdin_source,
+                        stdout=stdout_dest,
+                        stderr=stderr_dest
+                    )
+                    processes.append(p)
+                    
+                    if is_last and 1 in redirects and hasattr(stdout_dest, 'close'):
+                        stdout_dest.close()
+
+                except Exception as e:
+                    print(f"Error: {e}")
+            else:
+                print(f"{cmd_name}: command not found")
+
+
+        if current_pipe_write is not None:
+            os.close(current_pipe_write)
+            
+        if prev_pipe_read is not None:
+            os.close(prev_pipe_read)
+            
+        prev_pipe_read = current_pipe_read
+
+    for p in processes:
+        p.wait()
+
 def load_history():
     histfile = os.getenv("HISTFILE")
     if not histfile or not os.path.exists(histfile):
@@ -314,6 +431,11 @@ def main():
                 continue
 
             if not parts:
+                continue
+
+            if "|" in parts:
+                pipeline_cmds = parse_pipeline(parts)
+                run_pipeline(pipeline_cmds)
                 continue
 
             command_parts, redirects = parse_redirection(parts)
