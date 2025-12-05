@@ -221,11 +221,8 @@ def parse_redirection(parts):
 
 def main():
     while True:
-        sys.stdout.write("$ ")
-        sys.stdout.flush()
-
         try:
-            user_input = input()
+            user_input = input("$ ")
         except EOFError:
             break
 
