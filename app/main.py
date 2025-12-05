@@ -502,12 +502,28 @@ def complete(text, state):
         return results[state]
     else:
         return None
+    
+def display_matches_hook(substitution, matches, longest_match_length):
+    # 1. print a newline to move to the next line before printing matches
+    print()
+    
+    # 2. Format the output according to the requirements:
+    #    - Sort alphabetically (matches are usually already sorted, but sort again to be safe)
+    #    - Strip trailing spaces from each match (because we added " " in complete)
+    #    - Join with two spaces "  "
+    buffer = "  ".join([m.strip() for m in sorted(matches)])
+    print(buffer)
+    
+    # 3. After printing, readline will automatically reprint the prompt ($ ) and the user's current input,
+    #    so we don't need to manually print("$ " + user_input) here
+    sys.stdout.flush()
 
 def main():
     # Loads history on startup
     load_history()
 
     readline.set_completer(complete)
+    readline.set_completion_display_matches_hook(display_matches_hook)
     
     if 'libedit' in readline.__doc__: # type: ignore
         # macOS (Libedit) style
