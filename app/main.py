@@ -291,7 +291,7 @@ def parse_pipeline(tokens):
 def run_pipeline(commands):
     processes = []
 
-    prev_pipe_read = None # THis holds the exit of previous pipe
+    prev_pipe_read = None # This holds the exit of previous pipe
 
     for i, cmd_tokens in enumerate(commands):
         is_last = (i == len(commands) - 1)
@@ -325,13 +325,25 @@ def run_pipeline(commands):
         # Determine Input
         stdin_source = prev_pipe_read
 
+        # Track if file descriptors have been consumed by fdopen
+        stdin_consumed = False
+        stdout_consumed = False
+
         if cmd_name in BUILTINS:
             original_stdout = sys.stdout
             original_stderr = sys.stderr
+            original_stdin = sys.stdin
 
             try:
+                # Handle stdin redirection
+                if stdin_source is not None:
+                    sys.stdin = os.fdopen(stdin_source, 'r')
+                    stdin_consumed = True  # fdopen took ownership
+                
+                # Handle stdout redirection
                 if stdout_dest is not None:
                     sys.stdout = os.fdopen(stdout_dest, 'w')
+                    stdout_consumed = True  # fdopen took ownership
                 elif 1 in redirects:
                      fname, mode = redirects[1]
                      sys.stdout = open(fname, mode)
@@ -341,8 +353,11 @@ def run_pipeline(commands):
             except Exception as e:
                 print(f"{cmd_name}: {e}", file=sys.stderr)
             finally:
+                if sys.stdin != original_stdin:
+                    sys.stdin.close()
                 if sys.stdout != original_stdout:
                     sys.stdout.close()
+                sys.stdin = original_stdin
                 sys.stdout = original_stdout
                 sys.stderr = original_stderr
 
@@ -362,6 +377,12 @@ def run_pipeline(commands):
                     )
                     processes.append(p)
                     
+                    # Close stdin/stdout after Popen - they're duplicated into child process
+                    if stdin_source is not None:
+                        stdin_consumed = True
+                    if stdout_dest is not None:
+                        stdout_consumed = True
+                    
                     if is_last and 1 in redirects and hasattr(stdout_dest, 'close'):
                         stdout_dest.close()
 
@@ -370,11 +391,11 @@ def run_pipeline(commands):
             else:
                 print(f"{cmd_name}: command not found")
 
-
-        if current_pipe_write is not None:
+        # Close pipe file descriptors if they weren't consumed by fdopen
+        if current_pipe_write is not None and not stdout_consumed:
             os.close(current_pipe_write)
             
-        if prev_pipe_read is not None:
+        if prev_pipe_read is not None and not stdin_consumed:
             os.close(prev_pipe_read)
             
         prev_pipe_read = current_pipe_read
