@@ -280,55 +280,68 @@ def load_history():
     except FileNotFoundError:
         pass
 
+def save_history():
+    histfile = os.getenv("HISTFILE")
+    if not histfile:
+        return
+
+    try:
+        readline.write_history_file(histfile)
+    except IOError:
+        pass
+
 def main():
     # Loads history on startup
     load_history()
-   
-    while True:
-        try:
-            user_input = input("$ ")
-        except EOFError:
-            break
+    
+    try:
+        while True:
+            try:
+                user_input = input("$ ")
+            except EOFError:
+                break
 
-        if not user_input:
-            continue
+            if not user_input:
+                continue
 
-        HISTORY.append(user_input)
+            HISTORY.append(user_input)
 
-        try:
-            # parts = shlex.split(user_input)
-            parts = parse_input(user_input)
-        except ValueError:
-            print("Syntax error: unbalanced quotes")
-            continue
+            try:
+                # parts = shlex.split(user_input)
+                parts = parse_input(user_input)
+            except ValueError:
+                print("Syntax error: unbalanced quotes")
+                continue
 
-        if not parts:
-            continue
+            if not parts:
+                continue
 
-        command_parts, redirects = parse_redirection(parts)
+            command_parts, redirects = parse_redirection(parts)
 
-        # Syntax error occurred
-        if command_parts is None:
-            continue
+            # Syntax error occurred
+            if command_parts is None:
+                continue
 
-        # Empty command
-        if not command_parts:
-            continue
+            # Empty command
+            if not command_parts:
+                continue
 
-        cmd = command_parts[0]
-        args = command_parts[1:]
+            cmd = command_parts[0]
+            args = command_parts[1:]
 
-        try:
-            with manage_io(redirects) as (out_handle, err_handle):
-                if cmd in BUILTINS:
-                    BUILTINS[cmd](args)
-                else:
-                    execute_external(
-                        cmd, args, stdout_handle=out_handle, stderr_handle=err_handle
-                    )
-        except Exception as e:
-            print(f"Error: {e}")
-
+            try:
+                with manage_io(redirects) as (out_handle, err_handle):
+                    if cmd in BUILTINS:
+                        BUILTINS[cmd](args)
+                    else:
+                        execute_external(
+                            cmd, args, stdout_handle=out_handle, stderr_handle=err_handle
+                        )
+            except Exception as e:
+                print(f"Error: {e}")
+    finally:
+        # Saves history on exit
+        save_history()
 
 if __name__ == "__main__":
     main()
