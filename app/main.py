@@ -63,7 +63,7 @@ def handle_history(args):
                     f.write(cmd + "\n")
 
                 HISTORY_WRITTEN_COUNT = len(HISTORY)
-                
+
         except Exception as e:
             print(f"history: {e}")
 
@@ -265,8 +265,25 @@ def parse_redirection(parts):
 
     return command_parts, redirects
 
+def load_history():
+    histfile = os.getenv("HISTFILE")
+    if not histfile or not os.path.exists(histfile):
+        return
+    
+    try:
+        with open(histfile, "r") as f:
+            for line in f:
+                cmd = line.strip()
+                if cmd:
+                    HISTORY.append(cmd)          # 1. For 'history' command
+                    readline.add_history(cmd)    # 2. For Up-Arrow key
+    except FileNotFoundError:
+        pass
 
 def main():
+    # Loads history on startup
+    load_history()
+   
     while True:
         try:
             user_input = input("$ ")
