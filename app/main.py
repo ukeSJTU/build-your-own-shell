@@ -516,6 +516,7 @@ def display_matches_hook(substitution, matches, longest_match_length):
     
     # 3. After printing, readline will automatically reprint the prompt ($ ) and the user's current input,
     #    so we don't need to manually print("$ " + user_input) here
+    sys.stdout.write("$ " + readline.get_line_buffer())
     sys.stdout.flush()
 
 def main():
