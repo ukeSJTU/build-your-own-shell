@@ -51,11 +51,22 @@ def handle_history(args):
             print(f"history: {path}: No such file or directory")
 
         return
+    
+    if len(args) >= 2 and args[0] == "-w":
+        path = args[1]
+        try:
+            with open(path, "w") as f:
+                for cmd in HISTORY:
+                    f.write(cmd + "\n")
+        except Exception as e:
+            print(f"history: {e}")
+
+        return
 
     limit = len(HISTORY)
     if args and args[0].isdigit():
         limit = int(args[0])
-        
+
     history_to_show = HISTORY[-limit:] if limit < len(HISTORY) else HISTORY
     
     start_index = len(HISTORY) - len(history_to_show) + 1
