@@ -39,7 +39,7 @@ def handle_type(args):
 
 def handle_history(args):
     for i, h in enumerate(HISTORY):
-        print(f"    {i+1}: {h}")
+        print(f"    {i+1}  {h}")
 
 BUILTINS = {
     "exit": handle_exit,
