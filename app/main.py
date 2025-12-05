@@ -39,8 +39,23 @@ def handle_type(args):
             print(f"{target}: not found")
 
 def handle_history(args):
-    limit = int(args[0]) if args and len(args) > 0 else len(HISTORY)
-    
+    if len(args) >= 2 and args[0] == "-r":
+        path = args[1]
+        try:
+            with open(path, "r") as f:
+                for line in f:
+                    cmd = line.strip()
+                    if cmd:
+                        HISTORY.append(cmd)
+        except FileNotFoundError:
+            print(f"history: {path}: No such file or directory")
+
+        return
+
+    limit = len(HISTORY)
+    if args and args[0].isdigit():
+        limit = int(args[0])
+        
     history_to_show = HISTORY[-limit:] if limit < len(HISTORY) else HISTORY
     
     start_index = len(HISTORY) - len(history_to_show) + 1
