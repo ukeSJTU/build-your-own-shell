@@ -4,6 +4,7 @@ import subprocess
 import sys
 from typing import Literal
 
+HISTORY = []
 
 def handle_exit(args):
     sys.exit(0)
@@ -37,7 +38,8 @@ def handle_type(args):
             print(f"{target}: not found")
 
 def handle_history(args):
-    raise NotImplementedError("history command hasn't been implemented")
+    for i, h in enumerate(HISTORY):
+        print(f"\t{i+1}: {h}")
 
 BUILTINS = {
     "exit": handle_exit,
@@ -222,6 +224,8 @@ def main():
 
         if not user_input:
             continue
+
+        HISTORY.append(user_input)
 
         try:
             # parts = shlex.split(user_input)
