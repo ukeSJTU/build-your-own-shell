@@ -36,6 +36,8 @@ def handle_type(args):
         else:
             print(f"{target}: not found")
 
+def handle_history(args):
+    raise NotImplementedError("history command hasn't been implemented")
 
 BUILTINS = {
     "exit": handle_exit,
@@ -43,6 +45,7 @@ BUILTINS = {
     "pwd": handle_pwd,
     "cd": handle_cd,
     "type": handle_type,
+    "history": handle_history,
 }
 
 
