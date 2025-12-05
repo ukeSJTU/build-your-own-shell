@@ -290,118 +290,163 @@ def parse_pipeline(tokens):
 
 def run_pipeline(commands):
     processes = []
-
-    prev_pipe_read = None # This holds the exit of previous pipe
-
+    num_commands = len(commands)
+    
+    # Create all pipes upfront
+    pipes = []
+    for i in range(num_commands - 1):
+        pipes.append(os.pipe())
+    
     for i, cmd_tokens in enumerate(commands):
-        is_last = (i == len(commands) - 1)
-
+        is_first = (i == 0)
+        is_last = (i == num_commands - 1)
+        
         cmd_parts, redirects = parse_redirection(cmd_tokens)
-        if not cmd_parts:
-            if prev_pipe_read is not None:
-                os.close(prev_pipe_read)
+        if not cmd_parts or redirects is None:
             continue
-
+        
         cmd_name = cmd_parts[0]
         cmd_args = cmd_parts[1:]
-
-        # Prepare the next pipe
-        current_pipe_read= None
-        current_pipe_write= None
-
-        stdout_dest = None
-        stderr_dest = None
-
+        
+        # Determine stdin source
+        stdin_fd = None
+        if not is_first:
+            stdin_fd = pipes[i - 1][0]  # Read end of previous pipe
+        
+        # Determine stdout destination
+        stdout_fd = None
         if not is_last:
-            r, w = os.pipe()
-            current_pipe_read = r
-            current_pipe_write = w
-            stdout_dest = w # Current cmd should write into w
-        else:
-            # If is the last command, default write to screen which is None
-            # Or will handled by parse_redirection
-            pass
-
-        # Determine Input
-        stdin_source = prev_pipe_read
-
-        # Track if file descriptors have been consumed by fdopen
-        stdin_consumed = False
-        stdout_consumed = False
-
+            stdout_fd = pipes[i][1]  # Write end of current pipe
+        elif 1 in redirects:
+            # Last command with file redirection
+            fname, mode = redirects[1]
+            stdout_fd = open(fname, mode)
+        
+        # Determine stderr destination
+        stderr_fd = None
+        if 2 in redirects:
+            fname, mode = redirects[2]
+            stderr_fd = open(fname, mode)
+        
         if cmd_name in BUILTINS:
-            original_stdout = sys.stdout
-            original_stderr = sys.stderr
-            original_stdin = sys.stdin
-
-            try:
-                # Handle stdin redirection
-                if stdin_source is not None:
-                    sys.stdin = os.fdopen(stdin_source, 'r')
-                    stdin_consumed = True  # fdopen took ownership
-                
-                # Handle stdout redirection
-                if stdout_dest is not None:
-                    sys.stdout = os.fdopen(stdout_dest, 'w')
-                    stdout_consumed = True  # fdopen took ownership
-                elif 1 in redirects:
-                     fname, mode = redirects[1]
-                     sys.stdout = open(fname, mode)
-
-                BUILTINS[cmd_name](cmd_args)
-                
-            except Exception as e:
-                print(f"{cmd_name}: {e}", file=sys.stderr)
-            finally:
-                if sys.stdin != original_stdin:
-                    sys.stdin.close()
-                if sys.stdout != original_stdout:
-                    sys.stdout.close()
-                sys.stdin = original_stdin
-                sys.stdout = original_stdout
-                sys.stderr = original_stderr
-
-        else:
-            full_path_found, full_path = find_exe_in_path(cmd_name)
-            if full_path_found:
+            # Handle built-in commands
+            pid = os.fork()
+            if pid == 0:
+                # Child process
                 try:
-                    if is_last and 1 in redirects:
-                         fname, mode = redirects[1]
-                         stdout_dest = open(fname, mode)
+                    # Close all unused pipe ends
+                    for j, (r, w) in enumerate(pipes):
+                        if j == i - 1 and not is_first:
+                            # Keep stdin_fd open
+                            os.close(w)
+                        elif j == i and not is_last:
+                            # Keep stdout_fd open
+                            os.close(r)
+                        else:
+                            os.close(r)
+                            os.close(w)
                     
-                    p = subprocess.Popen(
-                        [cmd_name] + cmd_args,
-                        stdin=stdin_source,
-                        stdout=stdout_dest,
-                        stderr=stderr_dest
-                    )
-                    processes.append(p)
+                    # Redirect stdin
+                    if stdin_fd is not None:
+                        os.dup2(stdin_fd, 0)
+                        os.close(stdin_fd)
                     
-                    # Close stdin/stdout after Popen - they're duplicated into child process
-                    if stdin_source is not None:
-                        stdin_consumed = True
-                    if stdout_dest is not None:
-                        stdout_consumed = True
+                    # Redirect stdout
+                    if stdout_fd is not None:
+                        if isinstance(stdout_fd, int):
+                            os.dup2(stdout_fd, 1)
+                            os.close(stdout_fd)
+                        else:
+                            os.dup2(stdout_fd.fileno(), 1)
+                            stdout_fd.close()
                     
-                    if is_last and 1 in redirects and hasattr(stdout_dest, 'close'):
-                        stdout_dest.close()
-
+                    # Redirect stderr
+                    if stderr_fd is not None:
+                        if isinstance(stderr_fd, int):
+                            os.dup2(stderr_fd, 2)
+                            os.close(stderr_fd)
+                        else:
+                            os.dup2(stderr_fd.fileno(), 2)
+                            stderr_fd.close()
+                    
+                    # Execute built-in
+                    BUILTINS[cmd_name](cmd_args)
+                    sys.exit(0)
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"{cmd_name}: {e}", file=sys.stderr)
+                    sys.exit(1)
             else:
+                # Parent process
+                processes.append(('builtin', pid))
+        else:
+            # Handle external commands
+            full_path_found, full_path = find_exe_in_path(cmd_name)
+            if not full_path_found:
                 print(f"{cmd_name}: command not found")
-
-        # Close pipe file descriptors if they weren't consumed by fdopen
-        if current_pipe_write is not None and not stdout_consumed:
-            os.close(current_pipe_write)
+                continue
             
-        if prev_pipe_read is not None and not stdin_consumed:
-            os.close(prev_pipe_read)
-            
-        prev_pipe_read = current_pipe_read
-
-    for p in processes:
-        p.wait()
+            try:
+                pid = os.fork()
+                if pid == 0:
+                    # Child process
+                    try:
+                        # Close all unused pipe ends
+                        for j, (r, w) in enumerate(pipes):
+                            if j == i - 1 and not is_first:
+                                # Keep stdin_fd open
+                                os.close(w)
+                            elif j == i and not is_last:
+                                # Keep stdout_fd open
+                                os.close(r)
+                            else:
+                                os.close(r)
+                                os.close(w)
+                        
+                        # Redirect stdin
+                        if stdin_fd is not None:
+                            os.dup2(stdin_fd, 0)
+                            os.close(stdin_fd)
+                        
+                        # Redirect stdout
+                        if stdout_fd is not None:
+                            if isinstance(stdout_fd, int):
+                                os.dup2(stdout_fd, 1)
+                                os.close(stdout_fd)
+                            else:
+                                os.dup2(stdout_fd.fileno(), 1)
+                                stdout_fd.close()
+                        
+                        # Redirect stderr
+                        if stderr_fd is not None:
+                            if isinstance(stderr_fd, int):
+                                os.dup2(stderr_fd, 2)
+                                os.close(stderr_fd)
+                            else:
+                                os.dup2(stderr_fd.fileno(), 2)
+                                stderr_fd.close()
+                        
+                        # Execute external command
+                        os.execvp(cmd_name, [cmd_name] + cmd_args)
+                    except Exception as e:
+                        print(f"Error: {e}", file=sys.stderr)
+                        sys.exit(1)
+                else:
+                    # Parent process
+                    processes.append(('external', pid))
+            except Exception as e:
+                print(f"Error: {e}")
+    
+    # Parent: close all pipe file descriptors
+    for r, w in pipes:
+        os.close(r)
+        os.close(w)
+    
+    # Wait for all child processes
+    for proc_type, pid in processes:
+        try:
+            os.waitpid(pid, 0)
+        except ChildProcessError:
+            pass
 
 def load_history():
     histfile = os.getenv("HISTFILE")
