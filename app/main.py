@@ -1,5 +1,6 @@
 import contextlib
 import os
+import readline  # noqa: F401
 import subprocess
 import sys
 from typing import Literal
