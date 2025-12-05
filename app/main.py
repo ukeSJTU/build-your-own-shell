@@ -1,6 +1,6 @@
 import contextlib
 import os
-import readline  # noqa: F401
+import readline
 import subprocess
 import sys
 from typing import Literal
@@ -473,9 +473,26 @@ def save_history():
     except IOError:
         pass
 
+def complete(text, state):
+    options = [cmd + " " for cmd in BUILTINS.keys() if cmd.startswith(text)]
+    
+    if state < len(options):
+        return options[state]
+    else:
+        return None
+
 def main():
     # Loads history on startup
     load_history()
+
+    readline.set_completer(complete)
+    
+    if 'libedit' in readline.__doc__: # type: ignore
+        # macOS (Libedit) style
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        # Linux (GNU Readline) style
+        readline.parse_and_bind("tab: complete")
     
     try:
         while True:
